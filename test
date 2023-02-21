@@ -1,0 +1,41 @@
+#!/bin/zsh
+
+set -eu
+# set -x
+
+script_dir=${0:a:h}
+subject=$script_dir/xcode-version-check
+echo "14.0.0" >"$script_dir/.xcode-version"
+error=0
+
+if result=$(XCODE_VERSION_ACTUAL=1410 PROJECT_DIR=$script_dir $subject); then
+    if [ -z "$result" ]; then
+        error=1
+    fi
+else
+    error=1
+fi
+
+if ! result=$(XCODE_VERSION_ACTUAL=1300 PROJECT_DIR=$script_dir $subject); then
+    if [ -z "$result" ]; then
+        error=1
+    fi
+else
+    error=1
+fi
+
+if result=$(XCODE_VERSION_ACTUAL=1400 PROJECT_DIR=$script_dir $subject); then
+    if [ -n "$result" ]; then
+        error=1
+    fi
+else
+    error=1
+fi
+
+if [[ "$error" -eq 0 ]]; then
+    echo "Pass"
+else
+    echo "Fail"
+fi
+
+exit "$error"

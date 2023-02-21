@@ -1,0 +1,98 @@
+#!/bin/zsh
+
+# BSD Zero Clause License
+#
+# Copyright (c) 2023 Nomasystems S.L.
+#
+# Permission to use, copy, modify, and/or distribute this software for any
+# purpose with or without fee is hereby granted.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+# REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+# AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+# INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+# LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+# OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+# PERFORMANCE OF THIS SOFTWARE.
+
+# Compare the actual Xcode version number to an expected version number,
+# specified in a .xcode-version file.
+# Emit:
+#   error: when actual-version < expected-version
+#   warning: when actual-version > expected-version
+# Must be run from an Xcode build phase script.
+
+set -eu
+
+if [[ ${XCODE_VERSION_ACTUAL-} ]]; then
+    xcode_version_actual=$XCODE_VERSION_ACTUAL
+else
+    echo "error: XCODE_VERSION_ACTUAL is not defined. This script must be run from an Xcode build phase."
+    exit 1
+fi
+
+if [[ ${PROJECT_DIR-} ]]; then
+    project_dir=$PROJECT_DIR
+else
+    echo "error: PROJECT_DIR is not defined. This script must be run from an Xcode build phase."
+    exit 1
+fi
+
+## Find the first directory, upwards in the directory hiearchy starting
+## from $PROJECT_DIR, that contains a file named ".xcode-version"
+find-xcode-version-file-dir() {
+    path=$project_dir
+    while [[ "$path" != "" && ! -e "$path/.xcode-version" ]]; do
+        path=${path%/*}
+    done
+    echo "$path"
+}
+
+
+## Returns the relative path from source dir to a target file
+## If target is in or below source, a relative path is returned,
+## otherwise an absolute path.
+relative-path-base() {
+     # ensure ends with trailing slash
+    source_dir="${1%/}/"
+    target_file="$2"
+    # remove source_dir from the beginning of target_file
+    result="${target_file#"$source_dir"}"
+    echo $result
+}
+
+xcode_version_file_dir=$(find-xcode-version-file-dir)
+xcode_version_file="$xcode_version_file_dir/.xcode-version"
+if [[ ! -e "$xcode_version_file" ]]; then
+    echo "error: .xcode-version file not found"
+    exit 1
+fi
+
+xcode_version_expected=$(<"$xcode_version_file")
+if [[ ! $xcode_version_expected =~ ^[0-9]+\.[0-9]+\.[0-9]+[[:space:]]*$ ]]; then
+    echo "error: .xcode-version file malformed, it must contain the version number on the format MAJOR.MINOR.PATCH"
+    exit 1
+fi
+## Strip trailing whitespace
+xcode_version_expected="${xcode_version_expected//[[:space:]]/}"
+
+## The expeected Xcode version in numeric form.
+## This is the format of the Xcode defined variable XCODE_VERSION_ACTUAL.
+## Eg. for Xcode 14.2 it is "1420".
+xcode_version_expected_numeric="${xcode_version_expected//./}"
+
+if [ "${xcode_version_actual}" != "${xcode_version_expected_numeric}" ]; then
+    if [[ ! "${xcode_version_actual}" < "${xcode_version_expected_numeric}" ]]; then
+        exit_code=0
+        issue_level="warning"
+    else
+        exit_code=1
+        issue_level="error"
+    fi
+    xcode_version_actual_string="${xcode_version_actual:0:2}.${xcode_version_actual:2:1}.${xcode_version_actual:3:1}"
+    xcode_version_file_relative_path=$(relative-path-base $project_dir $xcode_version_file)
+    echo "$issue_level: Unexpected Xcode version: $xcode_version_actual_string." \
+        "Please use Xcode $xcode_version_expected." \
+        "The expected version is configured in $xcode_version_file_relative_path."
+    exit $exit_code
+fi
