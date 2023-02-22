@@ -6,6 +6,8 @@ Emits:
 * error: when `actual-version < expected-version`
 * warning: when `actual-version > expected-version`
 
+![](assets/screenshot.png)
+
 ## Why would I want to use this?
 
 Ensure that all developers on your team, and your CI, builds the app with the same Xcode version.
